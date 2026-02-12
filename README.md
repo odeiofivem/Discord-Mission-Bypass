@@ -1,3 +1,5 @@
+[![CI](https://github.com/odeiofivem/Discord-Mission-Bypass/actions/workflows/main.yml/badge.svg)](https://github.com/odeiofivem/Discord-Mission-Bypass/actions/workflows/main.yml)
+
 ## 1. Como funciona
 Este repositório contém uma implementação técnica avançada voltada para a automação de protocolos de telemetria do ecossistema de Quests do Discord. O motor de injeção permite a emulação de estados de execução de aplicações, fluxos de vídeo e atividades de interação sem a necessidade de instanciamento de recursos de hardware externos ou execução de binários de jogos.
 A engine opera através da interceptação do `webpackChunkdiscord_app`, realizando o "sequestro" de módulos internos responsáveis pelo despacho de estados globais da aplicação.
