@@ -74,17 +74,12 @@
                 } else {
                     api.get({url: `/applications/public?application_ids=${applicationId}`}).then(res => {
                         const appData = res.body[0];
-                        const exeName = appData.executables.find(x => x.os === "win32").name.replace(">","");
                         const fakeGame = { id: applicationId, name: appData.name, pid: pid, pidPath: [pid], start: Date.now() };
-                        
                         const realGetRunningGames = RunningGameStore.getRunningGames;
                         const realGetGameForPID = RunningGameStore.getGameForPID;
-                        
                         RunningGameStore.getRunningGames = () => [fakeGame];
                         RunningGameStore.getGameForPID = (p) => p === pid ? fakeGame : undefined;
-                        
                         FluxDispatcher.dispatch({type: "RUNNING_GAMES_CHANGE", removed: [], added: [fakeGame], games: [fakeGame]});
-                        
                         let fn = data => {
                             let prog = data.userStatus.progress?.PLAY_ON_DESKTOP?.value || 0;
                             renderUI(Math.floor(prog), secondsNeeded, questName);
@@ -101,7 +96,6 @@
             } else if(taskName === "STREAM_ON_DESKTOP") {
                 let realFunc = ApplicationStreamingStore.getStreamerActiveStreamMetadata;
                 ApplicationStreamingStore.getStreamerActiveStreamMetadata = () => ({ id: applicationId, pid, sourceName: null });
-                
                 let fn = data => {
                     let prog = data.userStatus.progress?.STREAM_ON_DESKTOP?.value || 0;
                     renderUI(Math.floor(prog), secondsNeeded, questName);
@@ -113,16 +107,41 @@
                 };
                 FluxDispatcher.subscribe("QUESTS_SEND_HEARTBEAT_SUCCESS", fn);
             } else if(taskName === "PLAY_ACTIVITY") {
-                const channelId = ChannelStore.getSortedPrivateChannels()[0]?.id ?? Object.values(GuildChannelStore.getAllGuilds()).find(x => x != null && x.VOCAL.length > 0).VOCAL[0].channel.id;
+                const getSafeChannel = () => {
+                    const privateChannels = ChannelStore.getSortedPrivateChannels();
+                    if (privateChannels && privateChannels.length > 0) return privateChannels[0].id;
+
+                    const allGuilds = GuildChannelStore.getAllGuilds();
+                    for (const guildId in allGuilds) {
+                        const guild = allGuilds[guildId];
+                        if (guild && Array.isArray(guild.VOCAL) && guild.VOCAL.length > 0) {
+                            const firstVocal = guild.VOCAL.find(v => v?.channel?.id);
+                            if (firstVocal) return firstVocal.channel.id;
+                        }
+                    }
+                    return null;
+                };
+
+                const channelId = getSafeChannel();
+
+                if(!channelId) {
+                    console.error("%c[!] Erro crítico: Não foi possível localizar um ID de canal válido.", "color: #ed4245;");
+                    return;
+                }
+
                 const streamKey = `call:${channelId}:1`;
                 let fn = async () => {
                     while(true) {
-                        const res = await api.post({url: `/quests/${quest.id}/heartbeat`, body: {stream_key: streamKey, terminal: false}});
-                        const prog = res.body.progress.PLAY_ACTIVITY.value;
-                        renderUI(prog, secondsNeeded, questName);
-                        if(prog >= secondsNeeded) {
-                            await api.post({url: `/quests/${quest.id}/heartbeat`, body: {stream_key: streamKey, terminal: true}});
-                            break;
+                        try {
+                            const res = await api.post({url: `/quests/${quest.id}/heartbeat`, body: {stream_key: streamKey, terminal: false}});
+                            const prog = res.body.progress.PLAY_ACTIVITY.value;
+                            renderUI(prog, secondsNeeded, questName);
+                            if(prog >= secondsNeeded) {
+                                await api.post({url: `/quests/${quest.id}/heartbeat`, body: {stream_key: streamKey, terminal: true}});
+                                break;
+                            }
+                        } catch (e) {
+                            console.log("Aguardando sincronização da API...");
                         }
                         await new Promise(resolve => setTimeout(resolve, 20 * 1000));
                     }
